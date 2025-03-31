@@ -27,7 +27,7 @@ local Timer = require("timer")
 
 ```lua
 local myTimer = Timer.new({
-    name = "ExampleTimer", 
+    name = "example timer", 
     cooldown = 1,              -- can be in ms or game ticks (depending on useTicks attribute)
     useTicks = true,           -- whether or not to use game ticks instead of real time
     action = function()
