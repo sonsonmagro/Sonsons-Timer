@@ -13,6 +13,7 @@
 ---@field condition fun():boolean
 ---@field action function
 ---@field lastTriggered number
+---@field lastTime number
 local Timer = {}
 Timer.__index = Timer
 
@@ -56,6 +57,7 @@ function Timer.new(config)
     self.condition = config.condition or function() return false end
     self.action = config.action
     self.lastTriggered = 0
+    self.lastTime = 0
     return self
 end
 
@@ -64,15 +66,18 @@ end
 ---@param ... unknown so far only tested with playerManager instance and nil
 ---@return boolean
 function Timer:canTrigger(...)
-    local currentTick = self.useTicks and API.Get_tick() or os.clock() * 1000
+    local currentTick = API.Get_tick()
+    local currentTime = os.clock() * 1000
+    local delta = (self.useTicks and (currentTick - self.lastTriggered)) or (currentTime - self.lastTime)
     local args = {...}
 
+    
     -- Handle empty arguments safely
     if #args == 0 then
-        return ((currentTick - self.lastTriggered) >= self.cooldown) and self.condition()
+        return (delta >= self.cooldown) and self.condition()
     end
 
-    return ((currentTick - self.lastTriggered) >= self.cooldown) and self.condition(table.unpack(...))
+    return (delta >= self.cooldown) and self.condition(table.unpack(...))
 end
 
 ---executes the action provided with the timer after checking if it can be triggered
@@ -81,14 +86,17 @@ end
 function Timer:execute(...)
     local args = {...}
     if self:canTrigger(args) then
-        if self.action(table.unpack(args)) then
+        local func = function() if #args == 0 then return self.action() else return self.action(table.unpack(args)) end end
+
+        if func() then
             self:_debugLog("Action successful.")
             if self.useTicks then
                 self:_debugLog("Game tick: "..API.Get_tick())
             else
                 self:_debugLog("Time: ".. os.clock() * 1000)
             end
-            self.lastTriggered = self.useTicks and API.Get_tick() or os.clock() * 1000
+            self.lastTriggered = API.Get_tick()
+            self.lastTime = os.clock() * 1000
             return true
         end
     end
