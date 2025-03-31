@@ -1,4 +1,4 @@
-# Sonson's Timer
+# [v1.0.0] Sonson's Timer
 
 A lightweight module for managing timed actions with cooldown periods. I have found this to be useful when you need the main loop to run on a short sleep and without being interrupted.
 
