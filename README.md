@@ -1,4 +1,4 @@
-# [v1.0.0] Sonson's Timer
+# [v1.0.1] Sonson's Timer
 
 A lightweight module for managing timed actions with cooldown periods. I have found this to be useful when you need the main loop to run on a short sleep and without being interrupted.
 
@@ -47,6 +47,17 @@ myTimer:execute()
   - `useTicks` (boolean): Use game ticks instead of real time
   - `condition` (function): Function that must return true for the action to trigger
   - `action` (function): The action to execute when triggered
+
+### Available Methods
+| Method | Description |
+|:--|--|
+| `Timer:conditionCheck(...)` | Returns true if the conditions of the timer are met |
+| `Timer:cooldownCheck()` | Returns true if the timer is no longer on cooldown |
+| `Timer:canTrigger(...)` | Returns true if conditions are met and the timer is off cooldown |
+| `Timer:forceExecute(...)` | Executes the associated action. Starts cooldown if action returns true |
+| `Timer:bypassCondition(...)` | Executes the associated action if off cooldown |
+| `Timer:bypassCooldown(...)` | Executes the associated action if associated conditions are met |
+| `Timer:execute(...)` | Executes the associated actions if conditions are met and timer is off cooldown |
 
 ### Basic Example With Conditions
 
@@ -143,36 +154,57 @@ local summonConjures = Timer.new(
         name = "Summon conjures",
         cooldown = 300,         -- 300 ms
         useTicks = false,       -- uses real time instead of game ticks
-        condition = function() return true end,     -- controlled by playerManager:_handleStatuses()
+        condition = function() return true end,
         action = function(playerManager)
             --checks if conjures are summoned or animation matches summoning animation
-            if playerManager.state.animation == 35502 or (playerManager:getBuff(34177).found and playerManager:getBuff(34178).found and playerManager:getBuff(34179).found) then 
-                variables.conjuresSummoned = true
+            local zombieGhostSkellyCheck = playerManager:getBuff(34177).found and playerManager:getBuff(34178).found and playerManager:getBuff(34179).found
+            local conjuresExpiring = (playerManager:getBuff(34177).remaining < 59) or (playerManager:getBuff(34178).remaining < 59) or (playerManager:getBuff(34179).remaining < 59)
+            if (playerManager.state.animation == 35502) or (zombieGhostSkellyCheck and not conjuresExpiring) then
+                Config.Variables.conjuresSummoned = true
             end
-
+    
             -- reset flexTimer in case it was used elswhere
             -- override flexTimer configuration
-            if not (flexTimer.name == "Summoning conjures" or flexTimer.name == "Excalibur in off-hand -> Equipping lantern") then
-                flexTimer.cooldown, flexTimer.useTicks = 200, false
-                flexTimer:reset()
+            if not ((Config.Timer.flexTimer.name == "Summoning conjures") or (Config.Timer.flexTimer.name == "Equipping lantern") or (Config.Timer.flexTimer.name == "Unequipping lantern")) then
+                Config.Timer.flexTimer.cooldown = 1
+                Config.Timer.flexTimer.useTicks = true
+                Config.Timer.flexTimer:reset()
             end
-
-            --equip lantern if excal is in off-hand
-            if playerManager:_hasExcalibur() and playerManager:_hasExcalibur().location == "equipped" then
-                flexTimer.action = function(playerManager) return Inventory:Equip("Augmented Soulbound lantern") end
-                flexTimer.name = "Excalibur in off-hand -> Equipping lantern"
-                flexTimer:execute(playerManager)
+    
+            -- summons are not healthy
+            if conjuresExpiring and (playerManager:getBuff(34178).found or playerManager:getBuff(34179).found) then
+                ---@diagnostic disable-next-line
+                Config.Timer.flexTimer.action = function(playerManager) return API.DoAction_Interface(0xffffffff,0xdcad,1,1464,15,5,API.OFF_ACT_GeneralInterface_route) end
+                Config.Timer.flexTimer.name = "Unequipping lantern"
+                Config.Timer.flexTimer.cooldown = 1
+                Config.Timer.flexTimer.useTicks = true
+                Config.Timer.flexTimer:execute(playerManager)
+            end
+    
+            local lanternInInventory = false
+            for _, item in ipairs(API.ReadInvArrays33()) do
+                if string.find(item.textitem, "lantern") then
+                    lanternInInventory = true
+                    break
+                end
+            end
+    
+            --equip lantern
+            if lanternInInventory then
+                Config.Timer.flexTimer.action = function(playerManager) return API.DoAction_Inventory3("lantern", 0, 2, API.OFF_ACT_GeneralInterface_route) end
+                Config.Timer.flexTimer.name = "Equipping lantern"
+                Config.Timer.flexTimer:execute(playerManager)
                 return true -- exits out of sequence and activates summonConjure's timer
             end
-
-            if flexTimer:canTrigger(playerManager) then
-                if variables.conjureAttempts <= 5 then
+    
+            if Config.Timer.flexTimer:canTrigger(playerManager) then
+                if Config.Variables.conjureAttempts <= 5 then
                     --overrides flexTimer's name, cooldowns and actions
-                    flexTimer.cooldown = 600
-                    flexTimer.action = function() return Utils.useAbility("Conjure Undead Army") end
-                    flexTimer.name = "Summoning conjures"
-                    if flexTimer:execute() then
-                        variables.conjureAttempts = variables.conjureAttempts + 1
+                    Config.Timer.flexTimer.action = function() return Utils.useAbility("Conjure Undead Army") end
+                    Config.Timer.flexTimer.name = "Summoning conjures"
+                    if Config.Timer.flexTimer:execute() then
+                        Config.Timer.flexTimer.cooldown = 600
+                        Config.Variables.conjureAttempts = Config.Variables.conjureAttempts + 1
                         return true
                     end
                 else
@@ -227,8 +259,3 @@ while API.Read_LoopyLoop() do
     API.RandomSleep2(60, 10, 10)
 end
 ```
-
-
-## Version
-
-1.0.0
